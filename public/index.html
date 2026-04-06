@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UCF Bulk Creditor Search</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg:#0d0f12; --surface:#141720; --surface2:#1c2030;
+    --border:#2a2f3e; --accent:#00e5a0; --accent2:#0088ff;
+    --warn:#ffb800; --danger:#ff4455; --text:#e8eaf0; --muted:#6b7280;
+    --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;}
+
+  /* HEADER */
+  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;}
+  .logo{width:32px;height:32px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+  .header h1{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:.4px;}
+  .header h1 span{font-size:11px;color:var(--muted);margin-left:5px;}
+  .status-pill{margin-left:auto;display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);padding:5px 12px;border-radius:20px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background .3s;}
+  .dot.on{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+  .dot.off{background:var(--danger);}
+  .status-pill span{font-family:var(--mono);font-size:11px;color:var(--muted);}
+
+  /* LAYOUT */
+  .main{display:grid;grid-template-columns:330px 1fr;height:calc(100vh - 53px);}
+
+  /* SIDEBAR */
+  .sidebar{background:var(--surface);border-right:1px solid var(--border);padding:22px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:18px;}
+  .slabel{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px;}
+
+  /* DROP ZONE */
+  .dropzone{border:2px dashed var(--border);border-radius:9px;padding:22px 14px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg);position:relative;}
+  .dropzone:hover,.dropzone.over{border-color:var(--accent);background:rgba(0,229,160,.04);}
+  .dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+  .dz-icon{font-size:24px;margin-bottom:6px;}
+  .dropzone p{font-size:13px;color:var(--muted);}
+  .dropzone p strong{color:var(--accent);}
+  .dropzone small{font-size:11px;color:var(--muted);margin-top:3px;display:block;}
+
+  textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--mono);font-size:12px;padding:9px 11px;resize:vertical;min-height:120px;outline:none;transition:border-color .2s;line-height:1.65;}
+  textarea:focus{border-color:var(--accent);}
+  textarea::placeholder{color:var(--muted);}
+
+  /* COURTS */
+  .court-actions{display:flex;gap:8px;margin-bottom:5px;}
+  .lbtn{font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:var(--mono);text-decoration:underline;padding:0;}
+  .lbtn:hover{color:var(--text);}
+  .court-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:170px;overflow-y:auto;}
+  .cc{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;padding:3px 5px;border-radius:4px;transition:background .15s;}
+  .cc:hover{background:var(--surface2);color:var(--text);}
+  .cc input{accent-color:var(--accent);cursor:pointer;}
+
+  /* SETTINGS */
+  .sg{display:flex;flex-direction:column;gap:9px;}
+  .sr{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .sr label{font-size:12px;color:var(--muted);}
+  .sr input[type=number]{background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 8px;width:130px;outline:none;}
+  .sr input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer;}
+
+  /* PROGRESS */
+  .prog{display:none;flex-direction:column;gap:7px;}
+  .prog.on{display:flex;}
+  .pbar{background:var(--bg);border-radius:3px;height:5px;overflow:hidden;border:1px solid var(--border);}
+  .pfill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s;width:0;}
+  .pstats{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .pstats .h{color:var(--accent);}
+
+  /* BUTTONS */
+  .rbtn{width:100%;padding:12px;border:none;border-radius:7px;font-family:var(--mono);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.4px;}
+  #runBtn{background:var(--accent);color:#000;}
+  #runBtn:hover{background:#00ffb0;transform:translateY(-1px);}
+  #runBtn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;transform:none;}
+  #stopBtn{background:var(--danger);color:#fff;display:none;}
+
+  /* CONTENT */
+  .content{overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:18px;}
+
+  /* STATS */
+  .stats{display:flex;gap:12px;flex-wrap:wrap;}
+  .sc{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:13px 17px;flex:1;min-width:100px;}
+  .sc .v{font-family:var(--mono);font-size:24px;font-weight:600;line-height:1;}
+  .sc .v.g{color:var(--accent);}
+  .sc .v.b{color:var(--accent2);}
+  .sc .v.y{color:var(--warn);}
+  .sc .l{font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px;}
+
+  /* LOG */
+  .log{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:11px 13px;font-family:var(--mono);font-size:11px;max-height:120px;overflow-y:auto;display:none;}
+  .log.on{display:block;}
+  .ll{padding:1px 0;color:var(--muted);}
+  .ll.hit{color:var(--accent);}
+  .ll.err{color:var(--danger);}
+  .ll.info{color:var(--accent2);}
+
+  /* TOOLBAR */
+  .toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+  .sbox{background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 11px;outline:none;width:200px;transition:border-color .2s;}
+  .sbox:focus{border-color:var(--accent2);}
+  .tsel{background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 9px;outline:none;}
+  .exbtn{padding:7px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-family:var(--mono);font-size:12px;cursor:pointer;transition:all .15s;margin-left:auto;}
+  .exbtn:hover{border-color:var(--accent);background:rgba(0,229,160,.08);}
+  .exbtn:disabled{opacity:.4;cursor:not-allowed;}
+  .rc{font-family:var(--mono);font-size:11px;color:var(--muted);}
+
+  /* TABLE */
+  .tw{background:var(--surface);border:1px solid var(--border);border-radius:9px;overflow:hidden;}
+  table{width:100%;border-collapse:collapse;}
+  thead tr{background:var(--surface2);border-bottom:1px solid var(--border);}
+  th{padding:9px 13px;text-align:left;font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted);letter-spacing:1px;text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;}
+  th:hover{color:var(--text);}
+  th.s{color:var(--accent);}
+  td{padding:9px 13px;font-family:var(--mono);font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:rgba(255,255,255,.018);}
+  td.amt{color:var(--accent);font-weight:600;text-align:right;}
+  td.ct{color:var(--warn);}
+  td.db{color:var(--muted);}
+  td.qn{color:var(--muted);font-style:italic;font-size:11px;}
+  td a{color:var(--accent2);text-decoration:none;}
+  td a:hover{text-decoration:underline;}
+
+  .empty{text-align:center;padding:55px 20px;color:var(--muted);}
+  .empty .ei{font-size:38px;margin-bottom:10px;opacity:.45;}
+  .empty p{font-size:14px;}
+  .empty small{font-size:12px;margin-top:5px;display:block;}
+
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">⚖</div>
+  <h1>UCF Bulk Creditor Search <span>Powered by ucf.uscourts.gov</span></h1>
+  <div class="status-pill">
+    <div class="dot" id="dot"></div>
+    <span id="stxt">Connecting...</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+
+    <div>
+      <div class="slabel">Upload Creditor List</div>
+      <div class="dropzone" id="dz">
+        <input type="file" id="fi" accept=".csv,.txt">
+        <div class="dz-icon">📂</div>
+        <p><strong>Drop CSV / TXT here</strong></p>
+        <p>or click to browse</p>
+        <small>One name per line · CSV with name/company/creditor column</small>
+      </div>
+    </div>
+
+    <div>
+      <div class="slabel">Or Paste Names Directly</div>
+      <textarea id="mi" placeholder="Acme Corporation&#10;Smith & Sons LLC&#10;XYZ Holdings Inc&#10;...one per line"></textarea>
+    </div>
+
+    <div>
+      <div class="slabel">Courts to Search</div>
+      <div class="court-actions">
+        <button class="lbtn" onclick="setAll(true)">All</button>
+        <button class="lbtn" onclick="setAll(false)">None</button>
+        <button class="lbtn" onclick="setMajor()">Major Only</button>
+      </div>
+      <div class="court-grid" id="cg"></div>
+    </div>
+
+    <div>
+      <div class="slabel">Options</div>
+      <div class="sg">
+        <div class="sr"><label>Min Amount ($)</label><input type="number" id="minAmt" value="0" min="0"></div>
+        <div class="sr"><label>Delay between requests (ms)</label><input type="number" id="delay" value="300" min="100" max="3000"></div>
+        <div class="sr"><label>Fetch all result pages</label><input type="checkbox" id="ap" checked></div>
+      </div>
+    </div>
+
+    <div class="prog" id="prog">
+      <div class="pbar"><div class="pfill" id="pf"></div></div>
+      <div class="pstats"><span id="pt">0 / 0</span><span class="h" id="ph">0 records</span></div>
+    </div>
+
+    <button class="rbtn" id="runBtn" onclick="run()">▶ Run Bulk Search</button>
+    <button class="rbtn" id="stopBtn" onclick="stop()">■ Stop</button>
+
+  </div>
+
+  <div class="content">
+    <div class="stats">
+      <div class="sc"><div class="v" id="sS">0</div><div class="l">Searched</div></div>
+      <div class="sc"><div class="v g" id="sH">0</div><div class="l">Names w/ Hits</div></div>
+      <div class="sc"><div class="v b" id="sR">0</div><div class="l">Total Records</div></div>
+      <div class="sc"><div class="v y" id="sV">$0</div><div class="l">Total Value</div></div>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <div class="toolbar">
+      <input class="sbox" type="text" id="fb" placeholder="Filter results..." oninput="render()">
+      <select class="tsel" id="fc" onchange="render()"><option value="">All Courts</option></select>
+      <select class="tsel" id="fn" onchange="render()"><option value="">All Names</option></select>
+      <button class="exbtn" id="exBtn" onclick="exportCSV()" disabled>⬇ Export CSV</button>
+      <span class="rc" id="rc"></span>
+    </div>
+
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th onclick="sort('searchedName')">Searched Name</th>
+          <th onclick="sort('creditor')">Creditor Match</th>
+          <th onclick="sort('debtor')">Debtor</th>
+          <th onclick="sort('court')" class="s">Court</th>
+          <th onclick="sort('caseNum')">Case #</th>
+          <th onclick="sort('amount')">Amount</th>
+        </tr></thead>
+        <tbody id="tb">
+          <tr><td colspan="6"><div class="empty">
+            <div class="ei">🔍</div><p>No results yet</p>
+            <small>Upload a creditor list and click Run to begin</small>
+          </div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// Auto-detect API base: works both on Vercel and locally
+const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:5000'
+  : '';  // On Vercel, /api/* routes are relative
+
+const COURTS=[
+  {c:'akb',n:'Alaska'},{c:'almb',n:'AL Middle'},{c:'alnb',n:'AL Northern'},{c:'alsb',n:'AL Southern'},
+  {c:'areb',n:'AR Eastern'},{c:'arwb',n:'AR Western'},{c:'azb',n:'Arizona'},{c:'cacb',n:'CA Central'},
+  {c:'caeb',n:'CA Eastern'},{c:'canb',n:'CA Northern'},{c:'casb',n:'CA Southern'},{c:'cob',n:'Colorado'},
+  {c:'ctb',n:'Connecticut'},{c:'dcb',n:'DC'},{c:'deb',n:'Delaware'},{c:'flmb',n:'FL Middle'},
+  {c:'flnb',n:'FL Northern'},{c:'flsb',n:'FL Southern'},{c:'gamnb',n:'GA Middle/N'},{c:'gasb',n:'GA Southern'},
+  {c:'hib',n:'Hawaii'},{c:'idb',n:'Idaho'},{c:'ilcb',n:'IL Central'},{c:'ilnb',n:'IL Northern'},
+  {c:'ilsb',n:'IL Southern'},{c:'innb',n:'IN Northern'},{c:'insb',n:'IN Southern'},{c:'iab',n:'Iowa'},
+  {c:'ksb',n:'Kansas'},{c:'kyeb',n:'KY Eastern'},{c:'kywb',n:'KY Western'},{c:'laeb',n:'LA Eastern'},
+  {c:'lamb',n:'LA Middle'},{c:'lawb',n:'LA Western'},{c:'mab',n:'Massachusetts'},{c:'mdb',n:'Maryland'},
+  {c:'meb',n:'Maine'},{c:'mieb',n:'MI Eastern'},{c:'miwb',n:'MI Western'},{c:'mnb',n:'Minnesota'},
+  {c:'moeb',n:'MO Eastern'},{c:'mowb',n:'MO Western'},{c:'msnb',n:'MS Northern'},{c:'mssb',n:'MS Southern'},
+  {c:'mtb',n:'Montana'},{c:'nceb',n:'NC Eastern'},{c:'ncmb',n:'NC Middle'},{c:'ncwb',n:'NC Western'},
+  {c:'ndb',n:'N Dakota'},{c:'neb',n:'Nebraska'},{c:'nhb',n:'New Hampshire'},{c:'njb',n:'New Jersey'},
+  {c:'nmb',n:'New Mexico'},{c:'nvb',n:'Nevada'},{c:'nyeb',n:'NY Eastern'},{c:'nynb',n:'NY Northern'},
+  {c:'nysb',n:'NY Southern'},{c:'nywb',n:'NY Western'},{c:'ohnb',n:'OH Northern'},{c:'ohsb',n:'OH Southern'},
+  {c:'okeb',n:'OK Eastern'},{c:'oknb',n:'OK Northern'},{c:'okwb',n:'OK Western'},{c:'orb',n:'Oregon'},
+  {c:'paeb',n:'PA Eastern'},{c:'pamb',n:'PA Middle'},{c:'pawb',n:'PA Western'},{c:'rib',n:'Rhode Island'},
+  {c:'scb',n:'S Carolina'},{c:'sdb',n:'S Dakota'},{c:'tneb',n:'TN Eastern'},{c:'tnmb',n:'TN Middle'},
+  {c:'tnwb',n:'TN Western'},{c:'txeb',n:'TX Eastern'},{c:'txnb',n:'TX Northern'},{c:'txsb',n:'TX Southern'},
+  {c:'txwb',n:'TX Western'},{c:'utb',n:'Utah'},{c:'vaeb',n:'VA Eastern'},{c:'vawb',n:'VA Western'},
+  {c:'vtb',n:'Vermont'},{c:'waeb',n:'WA Eastern'},{c:'wawb',n:'WA Western'},{c:'wieb',n:'WI Eastern'},
+  {c:'wiwb',n:'WI Western'},{c:'wvnb',n:'WV Northern'},{c:'wvsb',n:'WV Southern'},{c:'wyb',n:'Wyoming'},
+];
+const MAJOR=['njb','nysb','nyeb','cacb','canb','deb','ilnb','txsb','txnb','flsb','flmb','mab','paeb','nvb','azb','vaeb','mdb','cob','gamnb','mieb'];
+
+let results=[], stopped=false, sCol='amount', sDir='desc';
+
+function init(){
+  const g=document.getElementById('cg');
+  COURTS.forEach(({c,n})=>{
+    const l=document.createElement('label');
+    l.className='cc';
+    l.innerHTML=`<input type="checkbox" value="${c}" ${MAJOR.includes(c)?'checked':''}> ${n}`;
+    g.appendChild(l);
+  });
+  ping(); setInterval(ping,8000);
+}
+
+async function ping(){
+  try{
+    const r=await fetch(API+'/api/health',{signal:AbortSignal.timeout(4000)});
+    if(r.ok){
+      document.getElementById('dot').className='dot on';
+      document.getElementById('stxt').textContent='API online';
+      document.getElementById('runBtn').disabled=false;
+      return;
+    }
+  }catch(e){}
+  document.getElementById('dot').className='dot off';
+  document.getElementById('stxt').textContent='API offline';
+  document.getElementById('runBtn').disabled=true;
+}
+
+function setAll(v){document.querySelectorAll('#cg input').forEach(x=>x.checked=v);}
+function setMajor(){document.querySelectorAll('#cg input').forEach(x=>x.checked=MAJOR.includes(x.value));}
+
+// File upload
+document.getElementById('fi').addEventListener('change',e=>{if(e.target.files[0])readFile(e.target.files[0]);});
+const dz=document.getElementById('dz');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])readFile(e.dataTransfer.files[0]);});
+
+function readFile(f){
+  const r=new FileReader();
+  r.onload=e=>{
+    let names=[];
+    const txt=e.target.result;
+    if(f.name.endsWith('.csv')){
+      const lines=txt.split('\n');
+      const h=lines[0].toLowerCase().split(',');
+      const ci=h.findIndex(x=>/name|company|creditor|vendor/.test(x.replace(/"/g,'')));
+      names=lines.slice(1).map(l=>l.split(',')[ci>=0?ci:0]?.replace(/"/g,'').trim()).filter(Boolean);
+    } else {
+      names=txt.split('\n').map(l=>l.trim()).filter(Boolean);
+    }
+    document.getElementById('mi').value=names.join('\n');
+    log(`📂 Loaded ${names.length} names from "${f.name}"`, 'info');
+  };
+  r.readAsText(f);
+}
+
+function log(msg,type=''){
+  const el=document.getElementById('log');
+  el.classList.add('on');
+  const d=document.createElement('div');
+  d.className='ll '+type;
+  d.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`;
+  el.appendChild(d);
+  el.scrollTop=el.scrollHeight;
+}
+
+async function run(){
+  const raw=document.getElementById('mi').value.trim();
+  if(!raw){alert('Enter at least one creditor name.');return;}
+  const names=[...new Set(raw.split('\n').map(n=>n.trim()).filter(Boolean))];
+  const courts=[...document.querySelectorAll('#cg input:checked')].map(x=>x.value);
+  if(!courts.length){alert('Select at least one court.');return;}
+
+  const minAmt=parseFloat(document.getElementById('minAmt').value)||0;
+  const delay=parseInt(document.getElementById('delay').value)||300;
+  const ap=document.getElementById('ap').checked;
+
+  results=[]; stopped=false;
+  updateStats(); render();
+
+  document.getElementById('runBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+  document.getElementById('prog').classList.add('on');
+  document.getElementById('exBtn').disabled=true;
+
+  let searched=0; const hitNames=new Set();
+  log(`Starting: ${names.length} names × ${courts.length} courts`,'info');
+
+  for(const name of names){
+    if(stopped){log('Stopped by user.','err');break;}
+    let nameHits=0;
+    for(const court of courts){
+      if(stopped)break;
+      try{
+        const url=`${API}/api/search?name=${encodeURIComponent(name)}&court=${court}&min_amount=${minAmt}&all_pages=${ap}`;
+        const res=await fetch(url);
+        if(!res.ok)throw new Error(`HTTP ${res.status}`);
+        const data=await res.json();
+        if(data.error)throw new Error(data.error);
+        if(data.results?.length){
+          nameHits+=data.results.length;
+          results.push(...data.results);
+          hitNames.add(name);
+          log(`  ✓ ${data.results.length} record(s) in ${court.toUpperCase()} for "${name}"${data.pages>1?` (${data.pages} pages)`:''}`, 'hit');
+          render(); updateStats();
+        }
+        await sleep(delay);
+      }catch(err){
+        log(`  ✗ "${name}" [${court}] — ${err.message}`,'err');
+        await sleep(delay);
+      }
+    }
+    if(!nameHits) log(`  — no hits: "${name}"`);
+    searched++;
+    const p=(searched/names.length*100).toFixed(0);
+    document.getElementById('pf').style.width=p+'%';
+    document.getElementById('pt').textContent=`${searched} / ${names.length}`;
+    document.getElementById('ph').textContent=`${results.length} records`;
+    document.getElementById('sS').textContent=searched;
+  }
+
+  document.getElementById('runBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('exBtn').disabled=results.length===0;
+  log(`✓ Done. ${results.length} records across ${hitNames.size} matching names.`,'info');
+  updateStats(); render(); populateFilters();
+}
+
+function stop(){stopped=true;}
+
+function render(){
+  const f=document.getElementById('fb').value.toLowerCase();
+  const cf=document.getElementById('fc').value;
+  const nf=document.getElementById('fn').value;
+  let d=results.filter(r=>{
+    if(cf&&r.court!==cf)return false;
+    if(nf&&r.searchedName!==nf)return false;
+    if(f&&!JSON.stringify(r).toLowerCase().includes(f))return false;
+    return true;
+  });
+  d.sort((a,b)=>{
+    const va=a[sCol],vb=b[sCol];
+    if(sCol==='amount')return sDir==='desc'?vb-va:va-vb;
+    return sDir==='asc'?String(va||'').localeCompare(String(vb||'')):String(vb||'').localeCompare(String(va||''));
+  });
+  document.getElementById('rc').textContent=d.length?`${d.length.toLocaleString()} records`:'';
+  const tb=document.getElementById('tb');
+  if(!d.length){
+    tb.innerHTML=`<tr><td colspan="6"><div class="empty">
+      <div class="ei">${results.length?'🔎':'🔍'}</div>
+      <p>${results.length?'No results match filter':'No results yet'}</p>
+      <small>${results.length?'Try clearing the filter':'Upload a list and click Run'}</small>
+    </div></td></tr>`;
+    return;
+  }
+  tb.innerHTML=d.map(r=>`<tr>
+    <td class="qn">${x(r.searchedName)}</td>
+    <td>${x(r.creditor)}</td>
+    <td class="db">${x(r.debtor)}</td>
+    <td class="ct">${x(r.court)}</td>
+    <td>${r.caseHref?`<a href="${x(r.caseHref)}" target="_blank">${x(r.caseNum)}</a>`:x(r.caseNum)}</td>
+    <td class="amt">${fmt(r.amount)}</td>
+  </tr>`).join('');
+}
+
+function sort(col){
+  sDir=sCol===col?(sDir==='asc'?'desc':'asc'):(col==='amount'?'desc':'asc');
+  sCol=col;
+  document.querySelectorAll('th').forEach(t=>t.classList.remove('s'));
+  event.target.classList.add('s');
+  render();
+}
+
+function updateStats(){
+  const ns=new Set(results.map(r=>r.searchedName));
+  document.getElementById('sH').textContent=ns.size;
+  document.getElementById('sR').textContent=results.length;
+  document.getElementById('sV').textContent=fmt(results.reduce((s,r)=>s+r.amount,0));
+}
+
+function populateFilters(){
+  const cs=[...new Set(results.map(r=>r.court))].sort();
+  const ns=[...new Set(results.map(r=>r.searchedName))].sort();
+  document.getElementById('fc').innerHTML='<option value="">All Courts</option>'+cs.map(c=>`<option value="${c}">${c}</option>`).join('');
+  document.getElementById('fn').innerHTML='<option value="">All Names</option>'+ns.map(n=>`<option value="${n}">${x(n)}</option>`).join('');
+}
+
+function exportCSV(){
+  const cols=['Searched Name','Creditor Match','Debtor','Court','Case Number','Amount','UCF Link'];
+  const rows=results.map(r=>[r.searchedName,r.creditor,r.debtor,r.court,r.caseNum,r.amount.toFixed(2),r.caseHref||'']);
+  const csv=[cols,...rows].map(r=>r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`ucf_results_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const x=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const fmt=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+init();
+</script>
+</body>
+</html>
