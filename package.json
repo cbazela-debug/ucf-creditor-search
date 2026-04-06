@@ -1,0 +1,8 @@
+{
+  "name": "ucf-bulk-search",
+  "version": "1.0.0",
+  "description": "Bulk creditor search tool for ucf.uscourts.gov",
+  "engines": {
+    "node": ">=18"
+  }
+}
