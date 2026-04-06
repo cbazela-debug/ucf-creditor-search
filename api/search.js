@@ -121,16 +121,20 @@ module.exports = async function handler(req, res) {
   const court = (query.court || "").trim();
   const minAmount = parseFloat(query.min_amount || "0") || 0;
   const allPages = query.all_pages === "true";
+  const fastMode = query.fast_mode === "true";
 
-  if (!name || !court) {
-    return res
-      .status(400)
-      .json({ error: "name and court are required parameters" });
+  if (!name) {
+    return res.status(400).json({ error: "name is required" });
+  }
+  if (!fastMode && !court) {
+    return res.status(400).json({ error: "court is required unless fast_mode=true" });
   }
 
   try {
     const encodedName = encodeURIComponent(" " + name);
-    const page1Path = `/search?CreditorName=${encodedName}&SelectedCourts=${court}&page=1&sort=Amount&sortdir=DESC`;
+    // Fast mode: omit SelectedCourts entirely — UCF searches all 87 courts at once
+    const courtParam = fastMode ? "" : `&SelectedCourts=${court}`;
+    const page1Path = `/search?CreditorName=${encodedName}${courtParam}&page=1&sort=Amount&sortdir=DESC`;
 
     const { status, body } = await fetchUCF(page1Path);
     if (status !== 200) {
@@ -149,7 +153,7 @@ module.exports = async function handler(req, res) {
     if (allPages && lastPage > 1) {
       for (let p = 2; p <= Math.min(lastPage, 20); p++) {
         await sleep(150);
-        const pagePath = `/search?CreditorName=${encodedName}&SelectedCourts=${court}&page=${p}&sort=Amount&sortdir=DESC`;
+        const pagePath = `/search?CreditorName=${encodedName}${courtParam}&page=${p}&sort=Amount&sortdir=DESC`;
         try {
           const { body: pageBody } = await fetchUCF(pagePath);
           const { results: more } = parseResults(pageBody, name, minAmount);
