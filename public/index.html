@@ -208,6 +208,13 @@
         <div class="sr"><label>Min Amount ($)</label><input type="number" id="minAmt" value="0" min="0"></div>
         <div class="sr"><label>Delay between requests (ms)</label><input type="number" id="delay" value="300" min="100" max="3000"></div>
         <div class="sr"><label>Fetch all result pages</label><input type="checkbox" id="ap" checked></div>
+        <div class="sr" style="background:rgba(45,74,110,.06);padding:8px 10px;border-radius:6px;border:1px solid var(--border);margin-top:4px;">
+          <label style="color:var(--navy);font-weight:700;">⚡ Fast Mode — All Courts</label>
+          <input type="checkbox" id="fastMode" onchange="toggleFastMode(this.checked)">
+        </div>
+        <div id="fastModeNote" style="display:none;font-size:11px;color:var(--muted);background:var(--surface2);padding:8px 10px;border-radius:5px;line-height:1.5;">
+          1 request per name instead of 87. Searches all courts simultaneously. Much faster for large lists.
+        </div>
       </div>
     </div>
 
@@ -369,6 +376,7 @@ async function run(){
   const minAmt=parseFloat(document.getElementById('minAmt').value)||0;
   const delay=parseInt(document.getElementById('delay').value)||300;
   const ap=document.getElementById('ap').checked;
+  const fastMode=document.getElementById('fastMode').checked;
 
   results=[]; stopped=false;
   updateStats(); render();
@@ -379,39 +387,71 @@ async function run(){
   document.getElementById('exBtn').disabled=true;
 
   let searched=0; const hitNames=new Set();
-  log(`Starting: ${names.length} names × ${courts.length} courts`,'info');
 
-  for(const name of names){
-    if(stopped){log('Stopped by user.','err');break;}
-    let nameHits=0;
-    for(const court of courts){
-      if(stopped)break;
+  if(fastMode){
+    log(`⚡ Fast Mode: ${names.length} names → 1 request each (all courts)`,'info');
+    for(const name of names){
+      if(stopped){log('Stopped by user.','err');break;}
       try{
-        const url=`${API}/api/search?name=${encodeURIComponent(name)}&court=${court}&min_amount=${minAmt}&all_pages=${ap}`;
+        const url=`${API}/api/search?name=${encodeURIComponent(name)}&min_amount=${minAmt}&all_pages=${ap}&fast_mode=true`;
         const res=await fetch(url);
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const data=await res.json();
         if(data.error)throw new Error(data.error);
         if(data.results?.length){
-          nameHits+=data.results.length;
           results.push(...data.results);
           hitNames.add(name);
-          log(`  ✓ ${data.results.length} record(s) in ${court.toUpperCase()} for "${name}"${data.pages>1?` (${data.pages} pages)`:''}`, 'hit');
+          log(`  ✓ ${data.results.length} record(s) across all courts for "${name}"`, 'hit');
           render(); updateStats();
+        } else {
+          log(`  — no hits: "${name}"`);
         }
         await sleep(delay);
       }catch(err){
-        log(`  ✗ "${name}" [${court}] — ${err.message}`,'err');
+        log(`  ✗ "${name}" — ${err.message}`,'err');
         await sleep(delay);
       }
+      searched++;
+      const p=(searched/names.length*100).toFixed(0);
+      document.getElementById('pf').style.width=p+'%';
+      document.getElementById('pt').textContent=`${searched} / ${names.length}`;
+      document.getElementById('ph').textContent=`${results.length} records`;
+      document.getElementById('sS').textContent=searched;
     }
-    if(!nameHits) log(`  — no hits: "${name}"`);
-    searched++;
-    const p=(searched/names.length*100).toFixed(0);
-    document.getElementById('pf').style.width=p+'%';
-    document.getElementById('pt').textContent=`${searched} / ${names.length}`;
-    document.getElementById('ph').textContent=`${results.length} records`;
-    document.getElementById('sS').textContent=searched;
+  } else {
+    log(`Starting: ${names.length} names × ${courts.length} courts`,'info');
+    for(const name of names){
+      if(stopped){log('Stopped by user.','err');break;}
+      let nameHits=0;
+      for(const court of courts){
+        if(stopped)break;
+        try{
+          const url=`${API}/api/search?name=${encodeURIComponent(name)}&court=${court}&min_amount=${minAmt}&all_pages=${ap}`;
+          const res=await fetch(url);
+          if(!res.ok)throw new Error(`HTTP ${res.status}`);
+          const data=await res.json();
+          if(data.error)throw new Error(data.error);
+          if(data.results?.length){
+            nameHits+=data.results.length;
+            results.push(...data.results);
+            hitNames.add(name);
+            log(`  ✓ ${data.results.length} record(s) in ${court.toUpperCase()} for "${name}"${data.pages>1?` (${data.pages} pages)`:''}`, 'hit');
+            render(); updateStats();
+          }
+          await sleep(delay);
+        }catch(err){
+          log(`  ✗ "${name}" [${court}] — ${err.message}`,'err');
+          await sleep(delay);
+        }
+      }
+      if(!nameHits) log(`  — no hits: "${name}"`);
+      searched++;
+      const p=(searched/names.length*100).toFixed(0);
+      document.getElementById('pf').style.width=p+'%';
+      document.getElementById('pt').textContent=`${searched} / ${names.length}`;
+      document.getElementById('ph').textContent=`${results.length} records`;
+      document.getElementById('sS').textContent=searched;
+    }
   }
 
   document.getElementById('runBtn').style.display='block';
@@ -490,6 +530,13 @@ function exportCSV(){
   a.click();
 }
 
+function toggleFastMode(on){
+  document.getElementById('fastModeNote').style.display=on?'block':'none';
+  document.getElementById('cg').style.opacity=on?'0.3':'1';
+  document.getElementById('cg').style.pointerEvents=on?'none':'auto';
+  document.querySelectorAll('.court-actions button').forEach(b=>b.disabled=on);
+  document.getElementById('delay').value=on?500:300;
+}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const x=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const fmt=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
