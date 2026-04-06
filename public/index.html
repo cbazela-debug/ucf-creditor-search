@@ -505,8 +505,9 @@ async function readFile(f) {
       }
 
       const lines = txt.split('\n').filter(l => l.trim());
-      const header = parseCSVLine(lines[0].toLowerCase());
-      const ci = header.findIndex(h => /name|company|creditor|vendor/.test(h.replace(/"/g, '').trim()));
+      const header = parseCSVLine(lines[0]);
+      // Case-insensitive match on common column name variants
+      const ci = header.findIndex(h => /name|company|creditor|vendor|entity|business/i.test(h.replace(/"/g, '').trim()));
       const colIdx = ci >= 0 ? ci : 0;
       names = lines.slice(1)
         .map(l => parseCSVLine(l)[colIdx] || '')
@@ -516,18 +517,27 @@ async function readFile(f) {
       names = txt.split('\n').map(l => l.trim()).filter(Boolean);
     }
 
+    log(`📂 Parsed ${names.length} names from "${f.name}" — adding to watchlist...`, 'info');
     try {
-      await fetch(API + '/api/creditors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ names })
-      });
+      // Send in batches of 200 to avoid payload limits
+      const BATCH = 200;
+      for (let i = 0; i < names.length; i += BATCH) {
+        const batch = names.slice(i, i + BATCH);
+        await fetch(API + '/api/creditors', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ names: batch })
+        });
+        log(`  Added ${Math.min(i + BATCH, names.length)} / ${names.length}...`, 'info');
+      }
       await loadCreditors();
     } catch(e) {
-      names.forEach(name => creditors.push({ id: Date.now() + Math.random(), name, addedAt: new Date().toISOString() }));
+      // KV not set up — store locally for this session only
+      names.forEach(name => creditors.push({ id: (Date.now() + Math.random()).toString(), name, addedAt: new Date().toISOString() }));
       renderCreditorList();
+      log(`  ⚠ Saved locally (KV not connected — names won't persist after refresh)`, 'err');
     }
-    log(`📂 Loaded ${names.length} names from "${f.name}"`, 'info');
+    log(`✓ Done — ${names.length} names ready`, 'info');
   };
   reader.readAsText(f);
 }
