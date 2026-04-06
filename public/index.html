@@ -414,13 +414,16 @@ function switchTab(name) {
 // ── Creditor List ─────────────────────────────────────────────────────────────
 async function loadCreditors() {
   try {
-    const r = await fetch(API + '/api/creditors');
+    const r = await fetch(API + '/api/creditors', { signal: AbortSignal.timeout(4000) });
     if (!r.ok) throw new Error();
     const data = await r.json();
-    creditors = data.creditors || [];
+    // Only overwrite local array if DB returned something
+    if (data.creditors?.length) {
+      creditors = data.creditors;
+    }
     renderCreditorList();
   } catch(e) {
-    // KV not set up yet — use local array
+    // KV not set up or offline — keep whatever is already in local array
     renderCreditorList();
   }
 }
@@ -517,9 +520,19 @@ async function readFile(f) {
       names = txt.split('\n').map(l => l.trim()).filter(Boolean);
     }
 
-    log(`📂 Parsed ${names.length} names from "${f.name}" — adding to watchlist...`, 'info');
+    log(`📂 Parsed ${names.length} names from "${f.name}" — loading...`, 'info');
+
+    // Always load into local array first so Run Search works immediately
+    creditors = names.map((name, i) => ({
+      id: (Date.now() + i).toString(),
+      name: name.trim(),
+      addedAt: new Date().toISOString()
+    }));
+    renderCreditorList();
+    log(`✓ ${names.length} names loaded and ready — click Run Search Now`, 'hit');
+
+    // Also try to persist to database in background (won't block search)
     try {
-      // Send in batches of 200 to avoid payload limits
       const BATCH = 200;
       for (let i = 0; i < names.length; i += BATCH) {
         const batch = names.slice(i, i + BATCH);
@@ -528,16 +541,10 @@ async function readFile(f) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ names: batch })
         });
-        log(`  Added ${Math.min(i + BATCH, names.length)} / ${names.length}...`, 'info');
       }
-      await loadCreditors();
     } catch(e) {
-      // KV not set up — store locally for this session only
-      names.forEach(name => creditors.push({ id: (Date.now() + Math.random()).toString(), name, addedAt: new Date().toISOString() }));
-      renderCreditorList();
-      log(`  ⚠ Saved locally (KV not connected — names won't persist after refresh)`, 'err');
+      // KV not connected — that's fine, names are already in local array
     }
-    log(`✓ Done — ${names.length} names ready`, 'info');
   };
   reader.readAsText(f);
 }
